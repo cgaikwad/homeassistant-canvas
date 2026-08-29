@@ -1,5 +1,5 @@
 name: "Canvas Dashboard"
-version: "1.3.1"
+version: "1.3.2"
 slug: "canvas_dashboard"
 description: "Pulls Canvas LMS courses, grades, and assignment status for an observed student (parent Observer account) and exposes them as sensors + a dashboard panel"
 url: "https://github.com/cgaikwad/homeassistant-canvas"
@@ -16,7 +16,7 @@ panel_icon: mdi:school
 panel_title: Canvas
 homeassistant_api: true
 options:
-  canvas_domain: "smsd.instructure.com"
+  canvas_domain: ""
   canvas_token: ""
   observee_id: 0
   poll_interval_minutes: 30

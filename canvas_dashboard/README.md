@@ -48,7 +48,7 @@ new `token_expires_at`) into the add-on's Configuration tab and restart it.
 2. In HA: **Settings → Add-ons → Add-on Store**, then refresh (⋮ menu) —
    "Canvas Dashboard" appears under **Local add-ons**. Install it.
 3. Open the add-on's **Configuration** tab and fill in:
-   - `canvas_domain` — e.g. `smsd.instructure.com`
+   - `canvas_domain` — your school's Canvas hostname, e.g. `yourschool.instructure.com`
    - `canvas_token` — a personal access token generated *from the observer
      account* (Canvas → Account → Settings → Approved Integrations → New
      Access Token)
