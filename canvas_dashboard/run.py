@@ -171,7 +171,9 @@ def item_summary(i: dict) -> dict:
 
 
 def push_sensors(data: dict) -> None:
-    missing = [i for i in data["items"] if i["status"] == "missing"]
+    # Exclude on-paper items: Canvas has no digital record of these being turned in,
+    # so they're an unconfirmed signal, not a real "missing" - see canvas_lib.submission_status.
+    missing = [i for i in data["items"] if i["status"] == "missing" and not i["on_paper"]]
     late = [i for i in data["items"] if i["status"] == "late" and not i["submitted"]]
     upcoming = [i for i in data["items"] if i["status"] == "upcoming"]
 
