@@ -263,8 +263,10 @@ def render_html(data: dict) -> str:
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Canvas Dashboard</title>
 <style>
+  * {{ box-sizing: border-box; }}
   :root {{
     --bg: #f9fafb; --card: #ffffff; --text: #111827; --muted: #6b7280; --border: #e5e7eb;
   }}
@@ -278,18 +280,29 @@ def render_html(data: dict) -> str:
   .card {{ background:var(--card); border:1px solid var(--border); border-radius:10px;
            padding:1.25rem; margin-bottom:1.5rem; }}
   h2 {{ font-size:1.05rem; margin:0 0 1rem; }}
-  table {{ width:100%; border-collapse:collapse; font-size:.9rem; }}
+  .table-wrap {{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -1.25rem; padding:0 1.25rem; }}
+  table {{ width:100%; min-width:420px; border-collapse:collapse; font-size:.9rem; }}
   th {{ text-align:left; padding:.5rem .6rem; color:var(--muted); font-weight:600;
-        border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }}
+        border-bottom:1px solid var(--border); cursor:pointer; user-select:none;
+        white-space:nowrap; }}
   td {{ padding:.5rem .6rem; border-bottom:1px solid var(--border); }}
   tr:last-child td {{ border-bottom:none; }}
   a {{ color:inherit; }}
-  .badge {{ padding:.15rem .5rem; border-radius:999px; font-size:.78rem; font-weight:600; }}
-  .filters {{ margin-bottom:.75rem; }}
+  .badge {{ display:inline-block; padding:.15rem .5rem; border-radius:999px; font-size:.78rem;
+            font-weight:600; white-space:nowrap; }}
+  .filters {{ display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.75rem; }}
   .filters button {{ background:var(--bg); border:1px solid var(--border); color:var(--text);
-                      padding:.3rem .7rem; border-radius:999px; font-size:.8rem; margin-right:.4rem;
+                      padding:.35rem .75rem; border-radius:999px; font-size:.8rem;
                       cursor:pointer; }}
   .filters button.active {{ background:var(--text); color:var(--bg); }}
+  @media (max-width: 600px) {{
+    body {{ padding:1rem; }}
+    h1 {{ font-size:1.2rem; }}
+    .card {{ padding:1rem; border-radius:8px; margin-bottom:1rem; }}
+    .table-wrap {{ margin:0 -1rem; padding:0 1rem; }}
+    th, td {{ padding:.45rem .5rem; font-size:.82rem; }}
+    .filters button {{ padding:.4rem .7rem; font-size:.82rem; }}
+  }}
 </style>
 </head>
 <body>
@@ -305,22 +318,26 @@ def render_html(data: dict) -> str:
       <button data-filter="upcoming">Upcoming</button>
       <button data-filter="graded">Graded</button>
     </div>
+    <div class="table-wrap">
     <table id="items">
       <thead><tr><th>Due</th><th>Course</th><th>Assignment</th><th>Status</th><th>Score</th></tr></thead>
       <tbody>
       {item_rows_html}
       </tbody>
     </table>
+    </div>
   </div>
 
   <div class="card">
     <h2>Current grades</h2>
+    <div class="table-wrap">
     <table>
       <thead><tr><th>Course</th><th>Letter</th><th>Score</th></tr></thead>
       <tbody>
       {course_rows}
       </tbody>
     </table>
+    </div>
   </div>
 
 <script>
