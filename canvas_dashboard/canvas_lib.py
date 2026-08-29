@@ -322,8 +322,7 @@ def render_html(data: dict) -> str:
   <div class="card">
     <h2>Due soon / missing / late</h2>
     <div class="filters" id="filters">
-      <button data-filter="all" class="active">All</button>
-      <button data-filter="missing">Missing</button>
+      <button data-filter="missing" class="active">Missing</button>
       <button data-filter="late">Late</button>
       <button data-filter="upcoming">Upcoming</button>
       <button data-filter="graded">Graded</button>
@@ -351,18 +350,19 @@ def render_html(data: dict) -> str:
   </div>
 
 <script>
+  function applyFilter(filter) {{
+    document.querySelectorAll('#items tbody tr').forEach(row => {{
+      row.style.display = row.dataset.status === filter ? '' : 'none';
+    }});
+  }}
   document.getElementById('filters').addEventListener('click', (e) => {{
     const btn = e.target.closest('button');
     if (!btn) return;
     document.querySelectorAll('#filters button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    const filter = btn.dataset.filter;
-    document.querySelectorAll('#items tbody tr').forEach(row => {{
-      const status = row.dataset.status;
-      const show = filter === 'all' || status === filter;
-      row.style.display = show ? '' : 'none';
-    }});
+    applyFilter(btn.dataset.filter);
   }});
+  applyFilter('missing');
 </script>
 </body>
 </html>
