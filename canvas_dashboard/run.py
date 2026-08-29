@@ -77,6 +77,89 @@ def push_state(entity_id: str, state, attributes: dict) -> None:
         log(f"WARNING: failed to push {entity_id}: {e.code} {e.reason} - {detail}")
 
 
+def call_service(domain: str, service: str, data: dict) -> None:
+    url = f"{CORE_API}/services/{domain}/{service}"
+    payload = json.dumps(data).encode()
+    req = urllib.request.Request(
+        url,
+        method="POST",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {SUPERVISOR_TOKEN}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")
+        log(f"WARNING: failed to call {domain}.{service}: {e.code} {e.reason} - {detail}")
+
+
+def notify(notification_id: str, title: str, message: str) -> None:
+    """Create (or update, if already showing) a persistent notification in HA."""
+    call_service(
+        "persistent_notification",
+        "create",
+        {"notification_id": notification_id, "title": title, "message": message},
+    )
+
+
+def dismiss(notification_id: str) -> None:
+    call_service("persistent_notification", "dismiss", {"notification_id": notification_id})
+
+
+def push_token_status(options: dict, expired: bool) -> None:
+    """Track token health so it's visible as a sensor and, when it's close to expiring
+    or already rejected, as a Home Assistant notification (there's no Canvas API to
+    rotate the token itself - personal access tokens are UI-only to create)."""
+    expires_at_str = (options.get("token_expires_at") or "").strip()
+    days_remaining = None
+    if expires_at_str:
+        try:
+            expires_at = datetime.date.fromisoformat(expires_at_str)
+            days_remaining = (expires_at - datetime.date.today()).days
+        except ValueError:
+            log(f"WARNING: token_expires_at '{expires_at_str}' isn't a valid YYYY-MM-DD date")
+
+    if expired:
+        state = "expired"
+        notify(
+            "canvas_token_auth",
+            "Canvas token needs replacing",
+            "The Canvas add-on's access token was rejected (expired or revoked). "
+            "Generate a new personal access token from the observer account "
+            "(Canvas → Account → Settings → Approved Integrations → + New Access Token) "
+            "and paste it into the Canvas Dashboard add-on's Configuration tab, then "
+            "restart it.",
+        )
+    else:
+        dismiss("canvas_token_auth")
+        if days_remaining is not None and days_remaining <= 7:
+            state = "expiring_soon"
+            notify(
+                "canvas_token_expiring",
+                "Canvas token expiring soon",
+                f"The Canvas add-on's access token expires in {days_remaining} day(s). "
+                "Generate a new one from the observer account and update it (and the "
+                "token_expires_at date) in the add-on's Configuration tab.",
+            )
+        else:
+            state = "ok"
+            dismiss("canvas_token_expiring")
+
+    push_state(
+        "sensor.canvas_token_status",
+        state,
+        {
+            "friendly_name": "Canvas token status",
+            "icon": "mdi:key-alert" if state != "ok" else "mdi:key",
+            "days_remaining": days_remaining,
+        },
+    )
+
+
 def item_summary(i: dict) -> dict:
     return {
         "course": i["course"],
@@ -160,6 +243,7 @@ def fetch_and_publish(options: dict, cache: dict) -> None:
     log(f"Fetched {len(data['courses'])} course(s), {len(data['items'])} item(s) in window")
 
     push_sensors(data)
+    push_token_status(options, expired=False)
 
     html = canvas_lib.render_html(data)
     global _latest_html
@@ -175,6 +259,9 @@ def poll_loop() -> None:
     while True:
         try:
             fetch_and_publish(options, cache)
+        except canvas_lib.CanvasAuthError as e:
+            log(f"ERROR: {e}")
+            push_token_status(options, expired=True)
         except RuntimeError as e:
             log(f"ERROR: {e}")
         except Exception as e:  # noqa: BLE001 - keep the loop alive no matter what

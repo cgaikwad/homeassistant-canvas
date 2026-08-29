@@ -19,6 +19,18 @@ DAYS_AHEAD = 14   # how far into the future to show upcoming work
 DAYS_BEHIND = 14  # how far back to show recently graded/past-due items
 
 
+class CanvasAuthError(RuntimeError):
+    """The token was rejected (expired, revoked, or invalid) — a 401/403 from Canvas."""
+
+
+def _raise_for_http_error(url: str, e: urllib.error.HTTPError):
+    detail = e.read().decode("utf-8", "replace")
+    message = f"GET {url} failed: {e.code} {e.reason} - {detail}"
+    if e.code in (401, 403):
+        raise CanvasAuthError(message) from e
+    raise RuntimeError(message) from e
+
+
 class CanvasClient:
     def __init__(self, domain: str, token: str):
         self.base = f"https://{domain}/api/v1"
@@ -37,8 +49,7 @@ class CanvasClient:
                     body = resp.read()
                     link_header = resp.headers.get("Link", "")
             except urllib.error.HTTPError as e:
-                detail = e.read().decode("utf-8", "replace")
-                raise RuntimeError(f"GET {url} failed: {e.code} {e.reason} - {detail}") from e
+                _raise_for_http_error(url, e)
             data = json.loads(body)
             if isinstance(data, list):
                 results.extend(data)
@@ -60,8 +71,7 @@ class CanvasClient:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read())
         except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", "replace")
-            raise RuntimeError(f"GET {url} failed: {e.code} {e.reason} - {detail}") from e
+            _raise_for_http_error(url, e)
 
 
 def resolve_observee_id(client: CanvasClient) -> tuple[int, str]:

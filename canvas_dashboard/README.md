@@ -10,8 +10,29 @@ courses, grades, and assignment status, and:
   - `sensor.canvas_grade_<course>` — one per active course, state = letter
     grade, `score` attribute = numeric percent.
   - `sensor.canvas_last_updated` — timestamp of the last successful poll.
+  - `sensor.canvas_token_status` — `ok` / `expiring_soon` / `expired`
+    (`days_remaining` attribute), see **Token expiration** below.
 - Serves the same due/missing/late + grades dashboard as an ingress panel
   (shows up in the HA sidebar when "Show in sidebar" is enabled).
+
+## Token expiration
+
+Canvas has no API to rotate a personal access token — creating one is a
+browser-UI-only action, so this add-on can't generate a replacement for you.
+What it does instead:
+
+- If Canvas rejects the token (expired/revoked), the add-on immediately
+  raises a **persistent notification** in Home Assistant telling you to
+  regenerate it, and `sensor.canvas_token_status` flips to `expired`.
+- If you set the `token_expires_at` option (the date Canvas shows on the
+  token when you create it, `YYYY-MM-DD`), the add-on also warns you
+  **7 days before** it expires — same notification mechanism, plus
+  `sensor.canvas_token_status` becomes `expiring_soon`. Leave it blank to
+  skip this proactive warning and rely on the expired-token notification
+  alone.
+
+When you do regenerate: paste the new token (and, if you're using it, the
+new `token_expires_at`) into the add-on's Configuration tab and restart it.
 
 ## Install (local add-on, no repo needed)
 
