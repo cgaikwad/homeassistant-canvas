@@ -354,7 +354,7 @@ def render_html(data: dict) -> str:
   <div class="meta">Generated {generated_at}</div>
 
   <div class="card">
-    <h2>Due soon / missing / late</h2>
+    <h2>Assignments</h2>
     <div class="filters" id="filters">
       <button data-filter="missing" class="active">Missing</button>
       <button data-filter="late">Late</button>
