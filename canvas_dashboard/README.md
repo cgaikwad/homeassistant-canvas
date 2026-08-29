@@ -36,6 +36,23 @@ account (Canvas → Account → Settings → Approved Integrations → + New Acc
 Token), paste it into the add-on's Configuration tab, and restart it — the
 notification clears itself on the next successful poll.
 
+## Showing the dashboard to a non-admin user
+
+The ingress sidebar panel only shows for **admin** HA accounts — that's a
+hardcoded HA restriction on all add-on panels, not something this add-on
+controls. To give a non-admin user (e.g. your kid) their own view:
+
+1. This add-on also exposes the dashboard on a plain port (`8099`), no HA
+   login required — reachable at `http://<your-ha-host>:8099` from any
+   device on your LAN. It's not exposed to the internet unless you
+   separately port-forward it.
+2. In HA, create (or edit) a Lovelace dashboard, add a **Webpage** card
+   pointing at that URL.
+3. **Settings → Dashboards** → open that dashboard's settings → make sure
+   it's not restricted to admins, then have the non-admin user enable
+   "Show in sidebar" from their own profile (bottom-left avatar → the
+   dashboard should be listed there once they have access to it).
+
 ## Install (local add-on, no repo needed)
 
 1. Copy this `addon/` folder onto the HA host at

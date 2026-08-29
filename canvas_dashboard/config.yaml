@@ -1,5 +1,5 @@
 name: "Canvas Dashboard"
-version: "1.4.2"
+version: "1.5.0"
 slug: "canvas_dashboard"
 description: "Pulls Canvas LMS courses, grades, and assignment status for an observed student (parent Observer account) and exposes them as sensors + a dashboard panel"
 url: "https://github.com/cgaikwad/homeassistant-canvas"
@@ -16,6 +16,10 @@ panel_icon: mdi:school
 panel_title: Canvas
 homeassistant_api: true
 protected: false
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: "Canvas dashboard, plain HTTP - LAN only, no HA login. Only needed to embed it in a Lovelace view for non-admin users; the ingress sidebar panel doesn't use this port."
 options:
   canvas_domain: ""
   canvas_token: ""
