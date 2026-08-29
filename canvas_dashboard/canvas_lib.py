@@ -222,17 +222,8 @@ STATUS_STYLE = {
 
 
 def render_html(data: dict) -> str:
-    generated_at = data["generated_at"].astimezone().strftime("%a %b %-d, %Y %-I:%M %p")
-
-    def score_cell(c):
-        return "" if c["score"] is None else f"{c['score']:.1f}%"
-
-    course_rows = "\n".join(
-        f"<tr><td>{escape(c['name'])}</td>"
-        f"<td>{escape(c['letter'] or '')}</td>"
-        f"<td>{score_cell(c)}</td></tr>"
-        for c in data["courses"]
-    )
+    now = data["generated_at"]
+    generated_at = now.astimezone().strftime("%a %b %-d, %Y %-I:%M %p")
 
     def status_badge(status: str, submitted: bool, on_paper: bool) -> str:
         title = ""
@@ -250,24 +241,56 @@ def render_html(data: dict) -> str:
         title_attr = f' title="{escape(title)}"' if title else ""
         return f'<span class="badge" style="color:{color};background:{bg}"{title_attr}>{escape(label)}</span>'
 
-    item_rows = []
-    for i in data["items"]:
-        due_str = i["due_at"].astimezone().strftime("%a %b %-d, %-I:%M %p")
-        score_str = ""
+    def fmt_due(due_dt: datetime.datetime) -> tuple[str, str]:
+        """Short relative label for the card + a full date/time for the tooltip."""
+        days = (due_dt.date() - now.astimezone().date()).days
+        if days == 0:
+            rel = "today"
+        elif days == -1:
+            rel = "yesterday"
+        elif days == 1:
+            rel = "tomorrow"
+        elif -7 <= days < 0:
+            rel = f"{-days}d ago"
+        elif 0 < days <= 7:
+            rel = f"in {days}d"
+        else:
+            rel = due_dt.astimezone().strftime("%b %-d")
+        full = due_dt.astimezone().strftime("%a %b %-d, %-I:%M %p")
+        return rel, full
+
+    def item_card(i: dict) -> str:
+        rel, full = fmt_due(i["due_at"])
+        score_html = ""
         if i["score"] is not None:
             pts = f"/{i['points_possible']:g}" if i["points_possible"] else ""
-            score_str = f"{i['score']:g}{pts}"
-        link_open, link_close = (f'<a href="{escape(i["url"])}" target="_blank">', "</a>") if i["url"] else ("", "")
-        item_rows.append(
-            f"<tr data-status=\"{escape(i['status'])}\">"
-            f"<td>{due_str}</td>"
-            f"<td>{escape(i['course'])}</td>"
-            f"<td>{link_open}{escape(i['name'])}{link_close}</td>"
-            f"<td>{status_badge(i['status'], i['submitted'], i['on_paper'])}</td>"
-            f"<td>{score_str}</td>"
-            f"</tr>"
+            score_html = f'<div class="score">{i["score"]:g}{pts}</div>'
+        link_open, link_close = (
+            (f'<a href="{escape(i["url"])}" target="_blank">', "</a>") if i["url"] else ("", "")
         )
-    item_rows_html = "\n".join(item_rows)
+        return f"""
+    <div class="item" data-status="{escape(i['status'])}">
+      <div class="item-main">
+        <div class="item-name">{link_open}{escape(i['name'])}{link_close}</div>
+        <div class="item-course">{escape(i['course'])}</div>
+      </div>
+      <div class="item-side">
+        {status_badge(i['status'], i['submitted'], i['on_paper'])}
+        <div class="due" title="{escape(full)}">{escape(rel)}</div>
+        {score_html}
+      </div>
+    </div>"""
+
+    item_cards_html = "\n".join(item_card(i) for i in data["items"])
+
+    def grade_pill(c: dict) -> str:
+        score_str = "" if c["score"] is None else f'<span class="pct">{c["score"]:.0f}%</span>'
+        return (
+            f'<div class="grade-pill"><span class="g-name">{escape(c["name"])}</span>'
+            f'<span class="g-val"><b>{escape(c["letter"] or "—")}</b>{score_str}</span></div>'
+        )
+
+    grade_pills_html = "\n".join(grade_pill(c) for c in data["courses"])
 
     return f"""<!doctype html>
 <html lang="en">
@@ -276,7 +299,7 @@ def render_html(data: dict) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Canvas Dashboard</title>
 <style>
-  * {{ box-sizing: border-box; }}
+  * {{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }}
   :root {{
     --bg: #f9fafb; --card: #ffffff; --text: #111827; --muted: #6b7280; --border: #e5e7eb;
   }}
@@ -285,33 +308,44 @@ def render_html(data: dict) -> str:
   }}
   body {{ margin:0; padding:2rem; background:var(--bg); color:var(--text);
          font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }}
+  a {{ color:inherit; text-decoration:none; }}
   h1 {{ font-size:1.4rem; margin:0 0 .25rem; }}
   .meta {{ color:var(--muted); font-size:.85rem; margin-bottom:1.5rem; }}
   .card {{ background:var(--card); border:1px solid var(--border); border-radius:10px;
            padding:1.25rem; margin-bottom:1.5rem; }}
   h2 {{ font-size:1.05rem; margin:0 0 1rem; }}
-  .table-wrap {{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -1.25rem; padding:0 1.25rem; }}
-  table {{ width:100%; min-width:420px; border-collapse:collapse; font-size:.9rem; }}
-  th {{ text-align:left; padding:.5rem .6rem; color:var(--muted); font-weight:600;
-        border-bottom:1px solid var(--border); cursor:pointer; user-select:none;
-        white-space:nowrap; }}
-  td {{ padding:.5rem .6rem; border-bottom:1px solid var(--border); }}
-  tr:last-child td {{ border-bottom:none; }}
-  a {{ color:inherit; }}
-  .badge {{ display:inline-block; padding:.15rem .5rem; border-radius:999px; font-size:.78rem;
-            font-weight:600; white-space:nowrap; }}
-  .filters {{ display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.75rem; }}
+  .filters {{ display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:1rem; }}
   .filters button {{ background:var(--bg); border:1px solid var(--border); color:var(--text);
                       padding:.35rem .75rem; border-radius:999px; font-size:.8rem;
                       cursor:pointer; }}
   .filters button.active {{ background:var(--text); color:var(--bg); }}
+  .items {{ display:flex; flex-direction:column; gap:.5rem; }}
+  .item {{ display:flex; justify-content:space-between; gap:.75rem; background:var(--bg);
+           border:1px solid var(--border); border-radius:12px; padding:.7rem .85rem; }}
+  .item-main {{ min-width:0; }}
+  .item-name {{ font-size:.92rem; font-weight:600; line-height:1.3; }}
+  .item-course {{ font-size:.78rem; color:var(--muted); margin-top:.15rem; }}
+  .item-side {{ text-align:right; flex-shrink:0; display:flex; flex-direction:column;
+                align-items:flex-end; gap:.3rem; }}
+  .badge {{ display:inline-block; padding:.15rem .5rem; border-radius:999px; font-size:.72rem;
+            font-weight:600; white-space:nowrap; }}
+  .due {{ font-size:.72rem; color:var(--muted); }}
+  .score {{ font-size:.78rem; font-weight:600; }}
+  .empty {{ color:var(--muted); font-size:.85rem; padding:.5rem 0; }}
+  .grades {{ display:flex; flex-wrap:wrap; gap:.5rem; }}
+  .grade-pill {{ background:var(--bg); border:1px solid var(--border); border-radius:10px;
+                 padding:.5rem .7rem; font-size:.8rem; display:flex; flex-direction:column;
+                 gap:.25rem; flex:1 1 calc(33.33% - .5rem); min-width:110px; }}
+  .g-name {{ color:var(--muted); }}
+  .g-val {{ display:flex; align-items:baseline; gap:.35rem; }}
+  .g-val b {{ font-size:1.05rem; }}
+  .pct {{ color:var(--muted); font-size:.75rem; }}
   @media (max-width: 600px) {{
     body {{ padding:1rem; }}
     h1 {{ font-size:1.2rem; }}
     .card {{ padding:1rem; border-radius:8px; margin-bottom:1rem; }}
-    .table-wrap {{ margin:0 -1rem; padding:0 1rem; }}
-    th, td {{ padding:.45rem .5rem; font-size:.82rem; }}
-    .filters button {{ padding:.4rem .7rem; font-size:.82rem; }}
+    .item-name {{ font-size:.88rem; }}
+    .grade-pill {{ flex:1 1 calc(50% - .5rem); }}
   }}
 </style>
 </head>
@@ -327,33 +361,28 @@ def render_html(data: dict) -> str:
       <button data-filter="upcoming">Upcoming</button>
       <button data-filter="graded">Graded</button>
     </div>
-    <div class="table-wrap">
-    <table id="items">
-      <thead><tr><th>Due</th><th>Course</th><th>Assignment</th><th>Status</th><th>Score</th></tr></thead>
-      <tbody>
-      {item_rows_html}
-      </tbody>
-    </table>
+    <div class="items" id="items">
+      {item_cards_html}
+      <div class="empty" id="empty" style="display:none">Nothing here.</div>
     </div>
   </div>
 
   <div class="card">
     <h2>Current grades</h2>
-    <div class="table-wrap">
-    <table>
-      <thead><tr><th>Course</th><th>Letter</th><th>Score</th></tr></thead>
-      <tbody>
-      {course_rows}
-      </tbody>
-    </table>
+    <div class="grades">
+      {grade_pills_html}
     </div>
   </div>
 
 <script>
   function applyFilter(filter) {{
-    document.querySelectorAll('#items tbody tr').forEach(row => {{
-      row.style.display = row.dataset.status === filter ? '' : 'none';
+    let shown = 0;
+    document.querySelectorAll('#items .item').forEach(el => {{
+      const show = el.dataset.status === filter;
+      el.style.display = show ? '' : 'none';
+      if (show) shown++;
     }});
+    document.getElementById('empty').style.display = shown ? 'none' : '';
   }}
   document.getElementById('filters').addEventListener('click', (e) => {{
     const btn = e.target.closest('button');
