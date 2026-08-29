@@ -2,7 +2,6 @@ name: "Canvas Dashboard"
 version: "1.0.0"
 slug: "canvas_dashboard"
 description: "Pulls Canvas LMS courses, grades, and assignment status for an observed student (parent Observer account) and exposes them as sensors + a dashboard panel"
-url: ""
 arch:
   - aarch64
   - amd64
