@@ -1,7 +1,8 @@
 name: "Canvas Dashboard"
-version: "1.2.0"
+version: "1.2.1"
 slug: "canvas_dashboard"
 description: "Pulls Canvas LMS courses, grades, and assignment status for an observed student (parent Observer account) and exposes them as sensors + a dashboard panel"
+url: "https://github.com/cgaikwad/homeassistant-canvas"
 arch:
   - aarch64
   - amd64
