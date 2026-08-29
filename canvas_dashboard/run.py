@@ -110,19 +110,11 @@ def dismiss(notification_id: str) -> None:
     call_service("persistent_notification", "dismiss", {"notification_id": notification_id})
 
 
-def push_token_status(options: dict, expired: bool) -> None:
-    """Track token health so it's visible as a sensor and, when it's close to expiring
-    or already rejected, as a Home Assistant notification (there's no Canvas API to
-    rotate the token itself - personal access tokens are UI-only to create)."""
-    expires_at_str = (options.get("token_expires_at") or "").strip()
-    days_remaining = None
-    if expires_at_str:
-        try:
-            expires_at = datetime.date.fromisoformat(expires_at_str)
-            days_remaining = (expires_at - datetime.date.today()).days
-        except ValueError:
-            log(f"WARNING: token_expires_at '{expires_at_str}' isn't a valid YYYY-MM-DD date")
-
+def push_token_status(expired: bool) -> None:
+    """Track token health as a sensor and, when Canvas actually rejects it, a Home
+    Assistant notification (there's no Canvas API to rotate the token itself -
+    personal access tokens are UI-only to create, and this instance doesn't even
+    expose the Access Tokens API to check an expiration date up front)."""
     if expired:
         state = "expired"
         notify(
@@ -135,19 +127,8 @@ def push_token_status(options: dict, expired: bool) -> None:
             "restart it.",
         )
     else:
+        state = "ok"
         dismiss("canvas_token_auth")
-        if days_remaining is not None and days_remaining <= 7:
-            state = "expiring_soon"
-            notify(
-                "canvas_token_expiring",
-                "Canvas token expiring soon",
-                f"The Canvas add-on's access token expires in {days_remaining} day(s). "
-                "Generate a new one from the observer account and update it (and the "
-                "token_expires_at date) in the add-on's Configuration tab.",
-            )
-        else:
-            state = "ok"
-            dismiss("canvas_token_expiring")
 
     push_state(
         "sensor.canvas_token_status",
@@ -155,7 +136,6 @@ def push_token_status(options: dict, expired: bool) -> None:
         {
             "friendly_name": "Canvas token status",
             "icon": "mdi:key-alert" if state != "ok" else "mdi:key",
-            "days_remaining": days_remaining,
         },
     )
 
@@ -257,7 +237,7 @@ def fetch_and_publish(options: dict, cache: dict) -> None:
     log(f"Fetched {len(data['courses'])} course(s), {len(data['items'])} item(s) in window")
 
     push_sensors(data)
-    push_token_status(options, expired=False)
+    push_token_status(expired=False)
 
     html = canvas_lib.render_html(data)
     global _latest_html
@@ -275,7 +255,7 @@ def poll_loop() -> None:
             fetch_and_publish(options, cache)
         except canvas_lib.CanvasAuthError as e:
             log(f"ERROR: {e}")
-            push_token_status(options, expired=True)
+            push_token_status(expired=True)
         except RuntimeError as e:
             log(f"ERROR: {e}")
         except Exception as e:  # noqa: BLE001 - keep the loop alive no matter what
