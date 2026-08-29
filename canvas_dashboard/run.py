@@ -171,9 +171,11 @@ def item_summary(i: dict) -> dict:
 
 
 def push_sensors(data: dict) -> None:
-    # Exclude on-paper items: Canvas has no digital record of these being turned in,
-    # so they're an unconfirmed signal, not a real "missing" - see canvas_lib.submission_status.
+    # Split "missing" into a confirmed bucket (Canvas has a digital record it's unsubmitted
+    # and past due) and an on-paper bucket (Canvas has no record either way - see
+    # canvas_lib.submission_status) so an automation can treat them differently.
     missing = [i for i in data["items"] if i["status"] == "missing" and not i["on_paper"]]
+    missing_on_paper = [i for i in data["items"] if i["status"] == "missing" and i["on_paper"]]
     late = [i for i in data["items"] if i["status"] == "late" and not i["submitted"]]
     upcoming = [i for i in data["items"] if i["status"] == "upcoming"]
 
@@ -185,6 +187,16 @@ def push_sensors(data: dict) -> None:
             "unit_of_measurement": "items",
             "icon": "mdi:file-alert",
             "items": [item_summary(i) for i in missing],
+        },
+    )
+    push_state(
+        "sensor.canvas_missing_on_paper_count",
+        len(missing_on_paper),
+        {
+            "friendly_name": "Canvas missing assignments (on paper, unconfirmed)",
+            "unit_of_measurement": "items",
+            "icon": "mdi:file-question",
+            "items": [item_summary(i) for i in missing_on_paper],
         },
     )
     push_state(

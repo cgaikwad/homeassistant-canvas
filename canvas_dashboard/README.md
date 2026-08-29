@@ -4,9 +4,15 @@ Polls Canvas LMS (via a parent Observer account) for an observed student's
 courses, grades, and assignment status, and:
 
 - Pushes sensors into Home Assistant:
-  - `sensor.canvas_missing_count`, `sensor.canvas_late_count`,
-    `sensor.canvas_upcoming_count` — each with an `items` attribute listing
-    the actual assignments (course, name, due date, url).
+  - `sensor.canvas_missing_count` — confirmed missing (Canvas has a digital
+    record it's unsubmitted and past due).
+  - `sensor.canvas_missing_on_paper_count` — same, but for on-paper
+    assignments, where Canvas has no record either way (turned in by hand,
+    possibly already graded on paper) — treat this as "worth checking on,"
+    not a confirmed miss.
+  - `sensor.canvas_late_count`, `sensor.canvas_upcoming_count` — each with
+    an `items` attribute listing the actual assignments (course, name, due
+    date, url); the missing sensors above carry the same attribute.
   - `sensor.canvas_grade_<course>` — one per active course, state = letter
     grade, `score` attribute = numeric percent.
   - `sensor.canvas_last_updated` — timestamp of the last successful poll.
