@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -23,11 +24,32 @@ OPTIONS_PATH = "/data/options.json"
 STATE_CACHE_PATH = "/data/state_cache.json"
 INGRESS_PORT = 8099
 
+# On-open: reuse cached data if it's newer than this; otherwise block briefly
+# and fetch before serving. Manual refresh button: minimum gap between actual
+# Canvas calls, so repeated clicks (or an unauthenticated LAN-port iframe
+# reloading) can't hammer the Canvas API.
+STALE_AFTER_SECONDS = 5 * 60
+REFRESH_COOLDOWN_SECONDS = 30
+
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
 CORE_API = "http://supervisor/core/api"
 
+# Loaded once in main() and then treated as shared, mutable state across the
+# poll-loop thread and request-handler threads (fetch_and_publish() mutates
+# `cache` in place and persists it via save_cache()).
+_options: dict = {}
+_cache: dict = {}
+
+# Guards _latest_html and _last_fetch_at together, since fetch_and_publish()
+# always updates them as a pair.
 _latest_html_lock = threading.Lock()
 _latest_html = "<html><body><p>Canvas dashboard: waiting on first fetch...</p></body></html>"
+_last_fetch_at: datetime.datetime | None = None
+
+# Serializes actual fetch_and_publish() calls across the poll loop, the
+# on-open staleness check, and the manual refresh endpoint, so at most one
+# Canvas fetch is ever in flight at a time.
+_fetch_lock = threading.Lock()
 
 
 def log(message: str) -> None:
@@ -240,19 +262,19 @@ def fetch_and_publish(options: dict, cache: dict) -> None:
     push_token_status(expired=False)
 
     html = canvas_lib.render_html(data)
-    global _latest_html
+    global _latest_html, _last_fetch_at
     with _latest_html_lock:
         _latest_html = html
+        _last_fetch_at = datetime.datetime.now(datetime.timezone.utc)
 
 
 def poll_loop() -> None:
-    options = load_options()
-    cache = load_cache()
-    interval_minutes = int(options.get("poll_interval_minutes") or 30)
+    interval_minutes = int(_options.get("poll_interval_minutes") or 30)
 
     while True:
         try:
-            fetch_and_publish(options, cache)
+            with _fetch_lock:
+                fetch_and_publish(_options, _cache)
         except canvas_lib.CanvasAuthError as e:
             log(f"ERROR: {e}")
             push_token_status(expired=True)
@@ -263,8 +285,76 @@ def poll_loop() -> None:
         time.sleep(max(60, interval_minutes * 60))
 
 
+def maybe_refresh_stale() -> None:
+    """Called before serving a GET request. If the cached data is older than
+    STALE_AFTER_SECONDS, do a synchronous fetch first so opening the
+    dashboard shows current data instead of whatever the last scheduled poll
+    produced. Skips (serves whatever's cached) if a fetch is already running
+    elsewhere, rather than piling up concurrent Canvas calls."""
+    with _latest_html_lock:
+        last = _last_fetch_at
+    if last is not None:
+        age = (datetime.datetime.now(datetime.timezone.utc) - last).total_seconds()
+        if age < STALE_AFTER_SECONDS:
+            return
+
+    if not _fetch_lock.acquire(blocking=False):
+        return  # a fetch (poll loop, another refresh) is already in flight
+
+    try:
+        fetch_and_publish(_options, _cache)
+    except canvas_lib.CanvasAuthError as e:
+        log(f"ERROR (on-open refresh): {e}")
+        push_token_status(expired=True)
+    except Exception as e:  # noqa: BLE001 - never break the page load
+        log(f"ERROR (on-open refresh): unexpected failure: {e}")
+    finally:
+        _fetch_lock.release()
+
+
+def handle_manual_refresh() -> tuple[int, dict]:
+    """Handles POST /api/refresh: force a fetch now, subject to the cooldown
+    and fetch-lock coordination described above. Returns (http_status, json_body)."""
+    with _latest_html_lock:
+        last = _last_fetch_at
+    if last is not None:
+        elapsed = (datetime.datetime.now(datetime.timezone.utc) - last).total_seconds()
+        if elapsed < REFRESH_COOLDOWN_SECONDS:
+            wait = int(REFRESH_COOLDOWN_SECONDS - elapsed) + 1
+            return 429, {"ok": False, "error": f"Please wait {wait}s before refreshing again."}
+
+    if not _fetch_lock.acquire(blocking=True, timeout=30):
+        return 503, {"ok": False, "error": "A refresh is already in progress. Try again shortly."}
+
+    try:
+        # Someone else's fetch (the on-open staleness check, or a near-simultaneous
+        # refresh click) may have run to completion while we were waiting for the
+        # lock above - if so, ride on that result instead of hitting Canvas again.
+        with _latest_html_lock:
+            updated_while_waiting = _last_fetch_at != last
+        if updated_while_waiting:
+            return 200, {"ok": True}
+
+        fetch_and_publish(_options, _cache)
+    except canvas_lib.CanvasAuthError as e:
+        log(f"ERROR (manual refresh): {e}")
+        push_token_status(expired=True)
+        return 502, {
+            "ok": False,
+            "error": "Canvas rejected the access token. Check the Home Assistant notification.",
+        }
+    except Exception as e:  # noqa: BLE001 - report back instead of 500ing the request
+        log(f"ERROR (manual refresh): unexpected failure: {e}")
+        return 502, {"ok": False, "error": "Refresh failed. It will retry automatically."}
+    finally:
+        _fetch_lock.release()
+
+    return 200, {"ok": True}
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802 - stdlib method name
+        maybe_refresh_stale()
         with _latest_html_lock:
             body = _latest_html.encode()
         self.send_response(200)
@@ -278,14 +368,34 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):  # noqa: N802 - stdlib method name
+        path = urllib.parse.urlparse(self.path).path
+        if path != "/api/refresh":
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        status, payload = handle_manual_refresh()
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Security-Policy", "frame-ancestors *")
+        self.end_headers()
+        self.wfile.write(body)
+
     def log_message(self, fmt, *args):  # silence default per-request stderr logging
         pass
 
 
 def main():
+    global _options, _cache
     if not SUPERVISOR_TOKEN:
         log("WARNING: SUPERVISOR_TOKEN not set - sensor pushes to Home Assistant will fail. "
             "Make sure homeassistant_api: true is set in config.yaml.")
+
+    _options = load_options()
+    _cache = load_cache()
 
     threading.Thread(target=poll_loop, daemon=True).start()
 

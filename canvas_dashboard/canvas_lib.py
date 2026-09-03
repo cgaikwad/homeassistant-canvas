@@ -340,6 +340,11 @@ def render_html(data: dict) -> str:
   .g-val {{ display:flex; align-items:baseline; gap:.35rem; }}
   .g-val b {{ font-size:1.05rem; }}
   .pct {{ color:var(--muted); font-size:.75rem; }}
+  .meta {{ display:flex; align-items:center; flex-wrap:wrap; gap:.6rem; }}
+  .refresh-btn {{ background:var(--bg); border:1px solid var(--border); color:var(--text);
+                   padding:.3rem .75rem; border-radius:999px; font-size:.78rem; cursor:pointer; }}
+  .refresh-btn:disabled {{ opacity:.6; cursor:default; }}
+  .refresh-status {{ font-size:.78rem; color:var(--muted); }}
   @media (max-width: 600px) {{
     body {{ padding:1rem; }}
     h1 {{ font-size:1.2rem; }}
@@ -351,7 +356,11 @@ def render_html(data: dict) -> str:
 </head>
 <body>
   <h1>Canvas Dashboard</h1>
-  <div class="meta">Generated {generated_at}</div>
+  <div class="meta">
+    <span>Generated {generated_at}</span>
+    <button id="refresh-btn" class="refresh-btn">Refresh</button>
+    <span id="refresh-status" class="refresh-status"></span>
+  </div>
 
   <div class="card">
     <h2>Assignments</h2>
@@ -392,6 +401,25 @@ def render_html(data: dict) -> str:
     applyFilter(btn.dataset.filter);
   }});
   applyFilter('missing');
+
+  document.getElementById('refresh-btn').addEventListener('click', async () => {{
+    const btn = document.getElementById('refresh-btn');
+    const status = document.getElementById('refresh-status');
+    btn.disabled = true;
+    status.textContent = 'Refreshing…';
+    try {{
+      const res = await fetch('/api/refresh', {{ method: 'POST' }});
+      const payload = await res.json();
+      if (res.ok && payload.ok) {{
+        location.reload();
+        return;
+      }}
+      status.textContent = payload.error || 'Refresh failed.';
+    }} catch (err) {{
+      status.textContent = 'Refresh failed (network error).';
+    }}
+    btn.disabled = false;
+  }});
 </script>
 </body>
 </html>

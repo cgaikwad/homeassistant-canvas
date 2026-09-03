@@ -20,6 +20,11 @@ courses, grades, and assignment status, and:
     below.
 - Serves the same due/missing/late + grades dashboard as an ingress panel
   (shows up in the HA sidebar when "Show in sidebar" is enabled).
+- Refreshes data on demand as well as on the timer: opening the dashboard
+  triggers a fetch if the cached data is more than 5 minutes old, and a
+  **Refresh** button on the page forces one immediately (rate-limited to
+  once per ~30 seconds so it can't be used to hammer Canvas from the
+  unauthenticated LAN port).
 
 ## Token expiration
 
