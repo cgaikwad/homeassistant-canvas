@@ -408,7 +408,11 @@ def render_html(data: dict) -> str:
     btn.disabled = true;
     status.textContent = 'Refreshing…';
     try {{
-      const res = await fetch('/api/refresh', {{ method: 'POST' }});
+      // Relative (no leading slash) so this still resolves correctly when the
+      // page is served under the HA ingress path prefix, not just on the
+      // plain LAN port - an absolute "/api/refresh" would go to HA core
+      // itself instead of this add-on and silently miss it entirely.
+      const res = await fetch('api/refresh', {{ method: 'POST' }});
       const payload = await res.json();
       if (res.ok && payload.ok) {{
         location.reload();
@@ -416,6 +420,7 @@ def render_html(data: dict) -> str:
       }}
       status.textContent = payload.error || 'Refresh failed.';
     }} catch (err) {{
+      console.error('Canvas dashboard refresh failed:', err);
       status.textContent = 'Refresh failed (network error).';
     }}
     btn.disabled = false;

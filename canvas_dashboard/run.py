@@ -13,6 +13,7 @@ import re
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -375,7 +376,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        status, payload = handle_manual_refresh()
+        # Log receipt unconditionally, before anything can go wrong below - so
+        # "nothing in the log" always means the request never reached the
+        # add-on (e.g. a client-side/network issue), never a silently-swallowed
+        # server-side failure.
+        log(f"Manual refresh requested from {self.client_address[0]}")
+        try:
+            status, payload = handle_manual_refresh()
+        except Exception as e:  # noqa: BLE001 - always answer and log, never die silently
+            log(f"ERROR (manual refresh): unhandled exception: {e}")
+            log(traceback.format_exc())
+            status, payload = 500, {"ok": False, "error": "Unexpected add-on error. Check the add-on log."}
+
         body = json.dumps(payload).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
