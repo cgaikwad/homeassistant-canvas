@@ -157,11 +157,17 @@ def submission_status(assignment: dict, now: datetime.datetime) -> str:
         return "excused"
     if sub.get("late"):
         return "late"
+    # Check missing before graded: some teachers (or an auto-zero policy) enter a 0
+    # for missing work, which sets workflow_state=graded/score=0.0 on a submission
+    # Canvas still flags missing (missing=true, late_policy_status="missing"). A
+    # zero for unsubmitted work isn't "done" - keep it in the missing bucket.
+    if sub.get("missing") or sub.get("late_policy_status") == "missing":
+        return "missing"
     if sub.get("workflow_state") == "graded" or sub.get("score") is not None:
         return "graded"
     if sub.get("submitted_at"):
         return "submitted"
-    if sub.get("missing") or (due_dt and due_dt < now):
+    if due_dt and due_dt < now:
         return "missing"
     return "upcoming"
 
