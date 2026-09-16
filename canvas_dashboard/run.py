@@ -179,6 +179,7 @@ def push_sensors(data: dict) -> None:
     missing_on_paper = [i for i in data["items"] if i["status"] == "missing" and i["on_paper"]]
     late = [i for i in data["items"] if i["status"] == "late" and not i["submitted"]]
     upcoming = [i for i in data["items"] if i["status"] == "upcoming"]
+    zeroed = [i for i in data["items"] if i["status"] == "zeroed"]
 
     push_state(
         "sensor.canvas_missing_count",
@@ -218,6 +219,16 @@ def push_sensors(data: dict) -> None:
             "unit_of_measurement": "items",
             "icon": "mdi:calendar-clock",
             "items": [item_summary(i) for i in upcoming],
+        },
+    )
+    push_state(
+        "sensor.canvas_zeroed_count",
+        len(zeroed),
+        {
+            "friendly_name": "Canvas zeroed assignments",
+            "unit_of_measurement": "items",
+            "icon": "mdi:numeric-0-box-outline",
+            "items": [item_summary(i) for i in zeroed],
         },
     )
     push_state(
