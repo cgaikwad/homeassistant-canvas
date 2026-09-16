@@ -311,24 +311,62 @@ def render_html(data: dict) -> str:
     # needs attention (missing/late), then upcoming, then recently-resolved things
     # (zeroed/submitted/excused), then already-handled graded at the bottom.
     STATUS_PRIORITY = ("missing", "late", "upcoming", "zeroed", "submitted", "excused", "graded")
+    STATUS_LABELS = {
+        "missing":   "Missing",
+        "late":      "Late",
+        "upcoming":  "Upcoming",
+        "zeroed":    "Zeroed",
+        "submitted": "Submitted",
+        "excused":   "Excused",
+        "graded":    "Graded",
+    }
+    ATTENTION_STATUSES = {"missing", "late"}
+
+    def status_group(status: str, group_items: list) -> str:
+        open_attr = " open" if status in ATTENTION_STATUSES else ""
+        items_html = "\n".join(item_card(i) for i in group_items)
+        return f"""
+    <details class="status-group"{open_attr}>
+      <summary class="status-summary">
+        <span class="status-label" data-accent="{status}">{escape(STATUS_LABELS[status])}</span>
+        <span class="status-count">{len(group_items)}</span>
+        <span class="chevron">▸</span>
+      </summary>
+      <div class="items">
+        {items_html}
+      </div>
+    </details>"""
 
     def course_card(c: dict) -> str:
         course_items = [i for i in data["items"] if i["course"] == c["name"]]
         course_items.sort(key=lambda i: (STATUS_PRIORITY.index(i["status"]), i["due_at"]))
+
         if course_items:
-            items_html = "\n".join(item_card(i) for i in course_items)
+            groups: dict[str, list] = {}
+            for i in course_items:
+                groups.setdefault(i["status"], []).append(i)
+            present = [s for s in STATUS_PRIORITY if s in groups]
+            counts = " · ".join(f"{len(groups[s])} {s}" for s in present)
+            counts_html = f'<span class="course-counts">{escape(counts)}</span>'
+            body_html = "\n".join(status_group(s, groups[s]) for s in present)
         else:
-            items_html = '<div class="empty">Nothing here.</div>'
+            counts_html = ""
+            body_html = '<div class="empty">Nothing here.</div>'
+
         return f"""
-    <div class="card course-card">
-      <div class="course-header">
-        <h2 class="course-name">{escape(c['name'])}</h2>
+    <details class="course-card" open>
+      <summary class="course-summary">
+        <div class="course-summary-left">
+          <span class="course-name">{escape(c['name'])}</span>
+          {counts_html}
+        </div>
         <div class="course-grade">{grade_pill(c)}</div>
+        <span class="chevron">▸</span>
+      </summary>
+      <div class="course-body">
+        {body_html}
       </div>
-      <div class="items">
-        {items_html}
-      </div>
-    </div>"""
+    </details>"""
 
     course_cards_html = "\n".join(course_card(c) for c in data["courses"])
 
@@ -392,9 +430,6 @@ def render_html(data: dict) -> str:
   .tab.active {{ background:var(--text); color:var(--bg); border-color:var(--text); }}
   .view {{ display:block; }}
   .view[hidden] {{ display:none; }}
-  .course-header {{ display:flex; align-items:center; justify-content:space-between;
-                     gap:1rem; margin-bottom:1rem; }}
-  .course-header h2 {{ margin:0; }}
   .course-grade .grade-pill {{ flex:0 0 auto; padding:.4rem .65rem; min-width:0; }}
   @media (max-width: 600px) {{
     body {{ padding:1rem; }}
@@ -402,7 +437,104 @@ def render_html(data: dict) -> str:
     .card {{ padding:1rem; border-radius:8px; margin-bottom:1rem; }}
     .item-name {{ font-size:.88rem; }}
     .grade-pill {{ flex:1 1 calc(50% - .5rem); }}
-    .course-header {{ flex-direction:column; align-items:flex-start; }}
+  }}
+
+  /* === Collapsible class cards + status groups === */
+  details > summary {{ list-style: none; cursor: pointer; }}
+  details > summary::-webkit-details-marker {{ display: none; }}
+  details > summary::marker {{ display: none; content: ""; }}
+
+  /* chevron at the right edge of every summary */
+  details > summary .chevron {{
+    display: inline-block;
+    width: 1em;
+    margin-left: .5rem;
+    color: var(--muted);
+    transition: transform .15s ease;
+    flex-shrink: 0;
+  }}
+  details[open] > summary .chevron {{ transform: rotate(90deg); }}
+
+  .course-card {{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    margin-bottom:1.5rem;
+    padding: 0;
+    overflow: hidden;
+  }}
+  .course-card > .course-summary {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    user-select: none;
+  }}
+  .course-card > .course-summary:hover {{ background: var(--bg); }}
+  .course-summary-left {{ display: flex; flex-direction: column; gap: .15rem; min-width: 0; }}
+  .course-summary-left .course-name {{
+    font-size: 1.05rem; font-weight: 600; line-height: 1.2;
+  }}
+  .course-counts {{ font-size: .78rem; color: var(--muted); }}
+  .course-grade .grade-pill {{ flex: 0 0 auto; padding: .4rem .65rem; min-width: 0; }}
+
+  .course-body {{ padding: 0 1.25rem 1.25rem; }}
+  .status-group {{
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    margin-bottom: .6rem;
+    overflow: hidden;
+  }}
+  .status-group:last-child {{ margin-bottom: 0; }}
+  .status-summary {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .55rem .75rem;
+    font-size: .85rem;
+    font-weight: 600;
+    user-select: none;
+  }}
+  .status-group > .status-summary:hover {{ background: var(--card); }}
+  .status-count {{
+    color: var(--muted);
+    font-weight: 500;
+    font-size: .78rem;
+  }}
+  .status-group > .items {{ padding: 0 .75rem .75rem; gap: .4rem; }}
+  .status-group > .items .item {{ background: var(--card); }}
+
+  /* status-label picks up accent color from data-status attr */
+  .status-summary .status-label::before {{
+    content: "";
+    display: inline-block;
+    width: .55rem; height: .55rem;
+    border-radius: 999px;
+    background: var(--muted);
+    margin-right: .5rem;
+    vertical-align: middle;
+  }}
+  .status-summary [data-accent="missing"]   {{ color: #b91c1c; }}
+  .status-summary [data-accent="missing"]::before   {{ background: #b91c1c; }}
+  .status-summary [data-accent="late"]      {{ color: #b45309; }}
+  .status-summary [data-accent="late"]::before      {{ background: #b45309; }}
+  .status-summary [data-accent="upcoming"]  {{ color: #374151; }}
+  .status-summary [data-accent="upcoming"]::before  {{ background: #6b7280; }}
+  .status-summary [data-accent="zeroed"]    {{ color: #9a3412; }}
+  .status-summary [data-accent="zeroed"]::before    {{ background: #9a3412; }}
+  .status-summary [data-accent="submitted"] {{ color: #1d4ed8; }}
+  .status-summary [data-accent="submitted"]::before {{ background: #1d4ed8; }}
+  .status-summary [data-accent="excused"]   {{ color: #6b21a8; }}
+  .status-summary [data-accent="excused"]::before   {{ background: #6b21a8; }}
+  .status-summary [data-accent="graded"]    {{ color: #15803d; }}
+  .status-summary [data-accent="graded"]::before    {{ background: #15803d; }}
+
+  /* mobile */
+  @media (max-width: 600px) {{
+    .course-card > .course-summary {{ padding: .85rem 1rem; }}
+    .course-body {{ padding: 0 1rem 1rem; }}
+    .course-summary-left .course-name {{ font-size: 1rem; }}
   }}
 </style>
 </head>
