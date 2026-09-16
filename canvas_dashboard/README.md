@@ -23,7 +23,10 @@ courses, grades, and assignment status, and:
   - `sensor.canvas_token_status` — `ok` / `expired`, see **Token expiration**
     below.
 - Serves the same due/missing/late + grades dashboard as an ingress panel
-  (shows up in the HA sidebar when "Show in sidebar" is enabled).
+  (shows up in the HA sidebar when "Show in sidebar" is enabled). Toggle
+  between a status-grouped view (Missing / Late / Upcoming / Zeroed / Graded)
+  and a class-grouped view (one card per course with its assignments and
+  current grade).
 - Data updates on the `poll_interval_minutes` timer, or on demand via the
   **Refresh** button on the page (rate-limited to once per ~30 seconds so it
   can't be used to hammer Canvas from the unauthenticated LAN port).
