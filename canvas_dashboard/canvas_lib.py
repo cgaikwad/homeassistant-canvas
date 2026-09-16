@@ -307,6 +307,31 @@ def render_html(data: dict) -> str:
 
     grade_pills_html = "\n".join(grade_pill(c) for c in data["courses"])
 
+    # Lower index = higher priority, shown first within a course card: stuff that
+    # needs attention (missing/late), then upcoming, then recently-resolved things
+    # (zeroed/submitted/excused), then already-handled graded at the bottom.
+    STATUS_PRIORITY = ("missing", "late", "upcoming", "zeroed", "submitted", "excused", "graded")
+
+    def course_card(c: dict) -> str:
+        course_items = [i for i in data["items"] if i["course"] == c["name"]]
+        course_items.sort(key=lambda i: (STATUS_PRIORITY.index(i["status"]), i["due_at"]))
+        if course_items:
+            items_html = "\n".join(item_card(i) for i in course_items)
+        else:
+            items_html = '<div class="empty">Nothing here.</div>'
+        return f"""
+    <div class="card course-card">
+      <div class="course-header">
+        <h2 class="course-name">{escape(c['name'])}</h2>
+        <div class="course-grade">{grade_pill(c)}</div>
+      </div>
+      <div class="items">
+        {items_html}
+      </div>
+    </div>"""
+
+    course_cards_html = "\n".join(course_card(c) for c in data["courses"])
+
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -360,37 +385,59 @@ def render_html(data: dict) -> str:
                    padding:.3rem .75rem; border-radius:999px; font-size:.78rem; cursor:pointer; }}
   .refresh-btn:disabled {{ opacity:.6; cursor:default; }}
   .refresh-status {{ font-size:.78rem; color:var(--muted); }}
+  .tabs {{ display:flex; gap:.4rem; margin-bottom:.75rem; }}
+  .tab {{ background:var(--bg); border:1px solid var(--border); color:var(--text);
+          padding:.4rem .9rem; border-radius:999px; font-size:.85rem;
+          font-weight:600; cursor:pointer; }}
+  .tab.active {{ background:var(--text); color:var(--bg); border-color:var(--text); }}
+  .view {{ display:block; }}
+  .view[hidden] {{ display:none; }}
+  .course-header {{ display:flex; align-items:center; justify-content:space-between;
+                     gap:1rem; margin-bottom:1rem; }}
+  .course-header h2 {{ margin:0; }}
+  .course-grade .grade-pill {{ flex:0 0 auto; padding:.4rem .65rem; min-width:0; }}
   @media (max-width: 600px) {{
     body {{ padding:1rem; }}
     h1 {{ font-size:1.2rem; }}
     .card {{ padding:1rem; border-radius:8px; margin-bottom:1rem; }}
     .item-name {{ font-size:.88rem; }}
     .grade-pill {{ flex:1 1 calc(50% - .5rem); }}
+    .course-header {{ flex-direction:column; align-items:flex-start; }}
   }}
 </style>
 </head>
 <body>
   <h1>Canvas Dashboard</h1>
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-view="status" role="tab">By status</button>
+    <button class="tab" data-view="class" role="tab">By class</button>
+  </div>
   <div class="meta">
     <span>Generated {generated_at}</span>
     <button id="refresh-btn" class="refresh-btn">Refresh</button>
     <span id="refresh-status" class="refresh-status"></span>
   </div>
 
-  <div class="card">
-    <h2>Assignments</h2>
-    <div class="filters" id="filters">
-      <button data-filter="missing" class="active">Missing</button>
-      <button data-filter="late">Late</button>
-      <button data-filter="upcoming">Upcoming</button>
-      <button data-filter="zeroed">Zeroed</button>
-      <button data-filter="graded">Graded</button>
+  <section id="view-status" class="view">
+    <div class="card">
+      <h2>Assignments</h2>
+      <div class="filters" id="filters">
+        <button data-filter="missing" class="active">Missing</button>
+        <button data-filter="late">Late</button>
+        <button data-filter="upcoming">Upcoming</button>
+        <button data-filter="zeroed">Zeroed</button>
+        <button data-filter="graded">Graded</button>
+      </div>
+      <div class="items" id="items">
+        {item_cards_html}
+        <div class="empty" id="empty" style="display:none">Nothing here.</div>
+      </div>
     </div>
-    <div class="items" id="items">
-      {item_cards_html}
-      <div class="empty" id="empty" style="display:none">Nothing here.</div>
-    </div>
-  </div>
+  </section>
+
+  <section id="view-class" class="view" hidden>
+    {course_cards_html}
+  </section>
 
   <div class="card">
     <h2>Current grades</h2>
@@ -417,6 +464,23 @@ def render_html(data: dict) -> str:
     applyFilter(btn.dataset.filter);
   }});
   applyFilter('missing');
+
+  function applyView(view) {{
+    document.querySelectorAll('.tab').forEach(t =>
+      t.classList.toggle('active', t.dataset.view === view));
+    document.querySelectorAll('.view').forEach(v => {{
+      v.hidden = (v.id !== 'view-' + view);
+    }});
+    try {{ localStorage.setItem('canvas-view', view); }} catch (_) {{}}
+  }}
+  document.querySelector('.tabs').addEventListener('click', (e) => {{
+    const btn = e.target.closest('.tab');
+    if (!btn) return;
+    applyView(btn.dataset.view);
+  }});
+  let initialView = 'status';
+  try {{ const v = localStorage.getItem('canvas-view'); if (v === 'class') initialView = 'class'; }} catch (_) {{}}
+  applyView(initialView);
 
   document.getElementById('refresh-btn').addEventListener('click', async () => {{
     const btn = document.getElementById('refresh-btn');
