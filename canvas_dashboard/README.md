@@ -26,7 +26,9 @@ courses, grades, and assignment status, and:
   (shows up in the HA sidebar when "Show in sidebar" is enabled). Toggle
   between a status-grouped view (Missing / Late / Upcoming / Zeroed / Graded)
   and a class-grouped view (one card per course with its assignments and
-  current grade).
+  current grade). Each class card is collapsible, and within each class the
+  status groups (Missing, Late, Upcoming, Zeroed, Submitted, Excused, Graded)
+  are independently expandable.
 - Data updates on the `poll_interval_minutes` timer, or on demand via the
   **Refresh** button on the page (rate-limited to once per ~30 seconds so it
   can't be used to hammer Canvas from the unauthenticated LAN port).
