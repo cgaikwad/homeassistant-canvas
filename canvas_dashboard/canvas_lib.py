@@ -163,6 +163,11 @@ def submission_status(assignment: dict, now: datetime.datetime) -> str:
     # zero for unsubmitted work isn't "done" - keep it in the missing bucket.
     if sub.get("missing") or sub.get("late_policy_status") == "missing":
         return "missing"
+    # A literal 0 that Canvas did NOT flag as missing/late-policy is a teacher-entered
+    # grade (e.g. a paper test marked "0/20 - see me"), not an auto-zero for unsubmitted
+    # work - surface it distinctly so it doesn't read as "hasn't been done."
+    if sub.get("score") == 0 and sub.get("workflow_state") == "graded":
+        return "zeroed"
     if sub.get("workflow_state") == "graded" or sub.get("score") is not None:
         return "graded"
     if sub.get("submitted_at"):
@@ -220,6 +225,7 @@ def build_dashboard_data(client: CanvasClient, observee_id: int) -> dict:
 STATUS_STYLE = {
     "missing": ("#b91c1c", "#fee2e2"),
     "late": ("#b45309", "#fef3c7"),
+    "zeroed": ("#9a3412", "#ffedd5"),
     "graded": ("#15803d", "#dcfce7"),
     "submitted": ("#1d4ed8", "#dbeafe"),
     "excused": ("#6b21a8", "#f3e8ff"),
@@ -236,6 +242,9 @@ def render_html(data: dict) -> str:
         if status == "late" and submitted:
             # Turned in, just after the due date — already handled, no action needed.
             label, color, bg = "late (submitted)", "#15803d", "#dcfce7"
+        elif status == "zeroed":
+            label = "graded · 0"
+            color, bg = STATUS_STYLE["zeroed"]
         elif status == "missing" and on_paper:
             # Canvas has no digital record for on-paper work, so this isn't a confirmed
             # miss — just "nothing logged in Canvas as of the due date."
@@ -374,6 +383,7 @@ def render_html(data: dict) -> str:
       <button data-filter="missing" class="active">Missing</button>
       <button data-filter="late">Late</button>
       <button data-filter="upcoming">Upcoming</button>
+      <button data-filter="zeroed">Zeroed</button>
       <button data-filter="graded">Graded</button>
     </div>
     <div class="items" id="items">

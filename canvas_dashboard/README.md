@@ -10,6 +10,10 @@ courses, grades, and assignment status, and:
     assignments, where Canvas has no record either way (turned in by hand,
     possibly already graded on paper) — treat this as "worth checking on,"
     not a confirmed miss.
+  - `sensor.canvas_zeroed_count` — graded and scored 0, but Canvas did *not*
+    flag it as missing (e.g. a teacher marked a paper test "0/20 — see me"
+    without setting the missing flag) — distinct from an auto-zero on
+    unsubmitted work, which stays under `sensor.canvas_missing_count`.
   - `sensor.canvas_late_count`, `sensor.canvas_upcoming_count` — each with
     an `items` attribute listing the actual assignments (course, name, due
     date, url); the missing sensors above carry the same attribute.
