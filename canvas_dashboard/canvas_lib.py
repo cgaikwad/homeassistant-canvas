@@ -354,7 +354,7 @@ def render_html(data: dict) -> str:
             body_html = '<div class="empty">Nothing here.</div>'
 
         return f"""
-    <details class="course-card" open>
+    <details class="course-card">
       <summary class="course-summary">
         <div class="course-summary-left">
           <span class="course-name">{escape(c['name'])}</span>
